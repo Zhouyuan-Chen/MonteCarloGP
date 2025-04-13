@@ -8,6 +8,7 @@ add_library(TinyAlligator)
 
 include(eigen)
 include(libigl)
+include(parlaylib)
 igl_include(glfw)
 igl_include(imgui)
 add_subdirectory(src)
@@ -21,7 +22,7 @@ target_link_libraries(TinyAlligator PUBLIC
     igl::glfw
     )
 
-target_link_libraries(TinyAlligator PUBLIC Eigen3::Eigen igl::glfw)
-target_link_libraries(alligator_play PRIVATE TinyAlligator igl::glfw)
+target_link_libraries(TinyAlligator PUBLIC Eigen3::Eigen igl::glfw parlay)
+target_link_libraries(alligator_play PRIVATE TinyAlligator igl::glfw parlay)
 
 enable_testing()

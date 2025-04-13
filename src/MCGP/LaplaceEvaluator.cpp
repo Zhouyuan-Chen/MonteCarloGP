@@ -1,5 +1,7 @@
 #include "LaplaceEvaluator.hpp"
 #include <igl/AABB.h>
+#include <parlay/primitives.h>
+#include <chrono>
 
 void laplace_evaluate(
     const Eigen::MatrixXd& V,
@@ -10,6 +12,10 @@ void laplace_evaluate(
     const int64_t sample_num,
     const int64_t walk_step)
 {
+    using Clock = std::chrono::high_resolution_clock;
+    auto start_time = Clock::now();
+
+
     igl::AABB<Eigen::MatrixXd, 3> bvh;
     bvh.init(V, F);
 
@@ -48,32 +54,48 @@ void laplace_evaluate(
         return laplace_wos(P, deep_num - 1);
     };
 
-    for (int64_t i = 0; i < EV.size(); i++) {
+
+    parlay::parallel_for(0, static_cast<int>(SV.rows()), [&](int64_t i) {
         Eigen::MatrixXd P(1, 3);
         P << SV(i, 0), SV(i, 1), SV(i, 2);
-        double evaluate_val = 0;
+        double evaluate_val_sum = 0;
         for (int64_t j = 0; j < sample_num; j++) {
             Eigen::MatrixXd P_copy = P;
-            evaluate_val += laplace_wos(P_copy, walk_step);
+            evaluate_val_sum += laplace_wos(P_copy, walk_step);
         }
-        evaluate_val /= 1.0 * sample_num;
-        EV(i) = evaluate_val;
+        EV(i) = evaluate_val_sum / static_cast<double>(sample_num);
+    });
+
+    // for (int64_t i = 0; i < EV.size(); i++) {
+    //     Eigen::MatrixXd P(1, 3);
+    //     P << SV(i, 0), SV(i, 1), SV(i, 2);
+    //     double evaluate_val = 0;
+    //     for (int64_t j = 0; j < sample_num; j++) {
+    //         Eigen::MatrixXd P_copy = P;
+    //         evaluate_val += laplace_wos(P_copy, walk_step);
+    //     }
+    //     evaluate_val /= 1.0 * sample_num;
+    //     EV(i) = evaluate_val;
 
 
-        // process bar
-        int barWidth = 50;
-        double progress = (i + 1.0) / EV.size();
-        std::cout << "[";
-        int pos = barWidth * progress;
-        for (int j = 0; j < barWidth; ++j) {
-            if (j < pos)
-                std::cout << "=";
-            else if (j == pos)
-                std::cout << ">";
-            else
-                std::cout << " ";
-        }
-        std::cout << "] " << int(progress * 100.0) << " %\r";
-        std::cout.flush();
-    }
+    //     // process bar
+    //     // int barWidth = 50;
+    //     // double progress = (i + 1.0) / EV.size();
+    //     // std::cout << "[";
+    //     // int pos = barWidth * progress;
+    //     // for (int j = 0; j < barWidth; ++j) {
+    //     //     if (j < pos)
+    //     //         std::cout << "=";
+    //     //     else if (j == pos)
+    //     //         std::cout << ">";
+    //     //     else
+    //     //         std::cout << " ";
+    //     // }
+    //     // std::cout << "] " << int(progress * 100.0) << " %\r";
+    //     // std::cout.flush();
+    // }
+
+    auto end_time = Clock::now();
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    std::cout << "Laplace evaluation completed in " << elapsed.count() << " seconds.\n";
 }

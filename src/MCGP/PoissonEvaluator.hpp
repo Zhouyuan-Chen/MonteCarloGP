@@ -21,7 +21,6 @@ void poisson_evaluate(
     const Eigen::VectorXd& BV,
     const Eigen::MatrixXd& SV,
     Eigen::VectorXd& EV,
-    const std::function<double(double x_min, double x_max, const Eigen::MatrixXd&)>&
-        source_term_func,
+    const std::function<double(const Eigen::Vector3d&)>& source_term_func,
     const int64_t sample_num = 10,
     const int64_t walk_step = 10);
