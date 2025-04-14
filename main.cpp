@@ -13,8 +13,10 @@ int main(int argc, char* argv[])
     Eigen::MatrixXd V, SV, C;
     Eigen::MatrixXi F;
     Eigen::VectorXd C_s;
-    int64_t sample_num = 1000;
+    int64_t sample_num = 1024;
     igl::read_triangle_mesh(argv[1], V, F);
+
+    bool cut_half = false;
 
     // set boundary condition
     Eigen::VectorXd BV_raw = V.col(1);
@@ -64,6 +66,7 @@ int main(int argc, char* argv[])
             Vtemp.topRows(SV.rows()) = SV;
             Vtemp.bottomRows(1) = center.transpose();
             SV = Vtemp;
+            std::cout << "sampling_num: " << SV.rows() << "/" << sample_num << std::endl;
             break;
         case '+':
             std::cout << "Increasing Sampling..." << std::endl;
@@ -71,6 +74,7 @@ int main(int argc, char* argv[])
             generate_sample(V, F, SV, sample_num);
             C.resize(SV.rows(), 3);
             C.setZero();
+            std::cout << "sampling_num: " << SV.rows() << "/" << sample_num << std::endl;
             break;
         case '-':
             std::cout << "Decreasing Sampling..." << std::endl;
@@ -78,6 +82,7 @@ int main(int argc, char* argv[])
             generate_sample(V, F, SV, sample_num);
             C.resize(SV.rows(), 3);
             C.setZero();
+            std::cout << "sampling_num: " << SV.rows() << "/" << sample_num << std::endl;
             break;
         case 'l': {
             std::cout << "Laplace" << std::endl;
@@ -107,14 +112,44 @@ int main(int argc, char* argv[])
             igl::colormap(igl::COLOR_MAP_TYPE_VIRIDIS, C_s, C_s.minCoeff(), C_s.maxCoeff(), C);
             // std::cout << C << std::endl;
             break;
+        case 'c':
+            std::cout << "cut half visulization " << (cut_half ? "off" : "on") << std::endl;
+            cut_half = !cut_half;
+            break;
         default: break;
         }
+
         viewer.data().clear();
-        viewer.data().set_points(SV, C);
+        if (cut_half) {
+            double x_mean = SV.col(2).mean();
+
+            std::vector<int> indices;
+            for (int i = 0; i < SV.rows(); ++i) {
+                if (SV(i, 2) < x_mean) {
+                    indices.push_back(i);
+                }
+            }
+
+            Eigen::MatrixXd SV_cut(indices.size(), 3);
+            Eigen::MatrixXd C_cut(indices.size(), 3);
+            for (int i = 0; i < indices.size(); ++i) {
+                SV_cut.row(i) = SV.row(indices[i]);
+                C_cut.row(i) = C.row(indices[i]);
+            }
+
+            viewer.data().set_points(SV_cut, C_cut);
+        } else {
+            viewer.data().set_points(SV, C);
+        }
+
+        // viewer.data().clear();
+        // viewer.data().set_points(SV, C);
         return true;
     };
 
     viewer.data().set_mesh(V, F);
+    igl::colormap(igl::COLOR_MAP_TYPE_VIRIDIS, BV, BV.minCoeff(), BV.maxCoeff(), C);
+    viewer.data().set_colors(C);
     viewer.data().show_lines = true;
     viewer.launch();
 

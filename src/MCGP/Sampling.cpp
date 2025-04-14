@@ -1,6 +1,7 @@
 #include "Sampling.hpp"
 #include <igl/fast_winding_number.h>
 #include <igl/slice_mask.h>
+#include <chrono>
 #include <random>
 
 void sampling_on_sphere(Eigen::MatrixXd& SP, const Eigen::VectorXd& R)
@@ -67,8 +68,9 @@ void generate_sample(
 
     double lower_bound = 0;
     double upper_bound = 1;
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::uniform_real_distribution<double> unif(lower_bound, upper_bound);
-    std::default_random_engine re;
+    std::default_random_engine re(seed);
 
     Eigen::MatrixXd QV(sample_num, 3);
     int64_t valid_sample_num = 0;
