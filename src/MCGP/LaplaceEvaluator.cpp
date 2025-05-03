@@ -15,9 +15,8 @@ void laplace_evaluate(
 {
     using Clock = std::chrono::high_resolution_clock;
     auto start_time = Clock::now();
-        std::cout << "Laplace evaluation work: " << static_cast<int>(SV.rows()) << " * " << sample_num
-              << " * " << walk_step << " * log(" << static_cast<int>(F.rows()) << ")"
-               << std::endl;
+    std::cout << "Laplace evaluation work: " << static_cast<int>(SV.rows()) << " * " << sample_num
+              << " * " << walk_step << " * log(" << static_cast<int>(F.rows()) << ")" << std::endl;
     std::cout << "Laplace evaluation span: " << 1 << " * " << 1 << " * " << walk_step << " * log("
               << static_cast<int>(F.rows()) << ")" << std::endl;
 
@@ -182,15 +181,16 @@ void laplace_evaluate_improved(
     parlay::parallel_for(0, static_cast<int>(SV.rows()), [&](int64_t i) {
         Eigen::MatrixXd P(1, 3);
         P << SV(i, 0), SV(i, 1), SV(i, 2);
-        // tabulate并行，平均作为结果
-        auto samples = parlay::delayed_tabulate(sample_num, [&](int64_t j) -> double {
+
+        std::vector<double> results(sample_num);
+        parlay::parallel_for(0, static_cast<int>(sample_num), [&](int64_t j) {
             Eigen::MatrixXd P_copy = P;
-            return laplace_wos(P_copy, walk_step, -1.0);
+            results[j] = laplace_wos(P_copy, walk_step, -1.0);
         });
-        // reduce求和
-        double evaluate_val_sum = parlay::reduce(samples, parlay::addm<double>());
+        double evaluate_val_sum = std::accumulate(results.begin(), results.end(), 0.0);
         EV(i) = evaluate_val_sum / static_cast<double>(sample_num);
     });
+
 
     auto end_time = Clock::now();
     std::chrono::duration<double> elapsed = end_time - start_time;
