@@ -151,7 +151,6 @@ void laplace_evaluate_improved(
             Eigen::MatrixXd R_Sphere_vec;
             Eigen::VectorXd vecR(1);
             vecR(0) = distance;
-
             sampling_on_sphere(R_Sphere_vec, vecR);
             Eigen::Vector3d new_sample_P = P.row(0) + R_Sphere_vec.row(0);
             new_samples[k] = new_sample_P;

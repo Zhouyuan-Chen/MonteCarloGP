@@ -91,7 +91,7 @@ int main(int argc, char* argv[])
             C_s.resize(SV.rows());
             BV = (BV_raw.array() - y_min) / (y_max - y_min);
             std::cout << "Begin" << std::endl;
-            laplace_evaluate_improved(V, F, BV, SV, C_s, 100, 10, 0.0001, 1);
+            laplace_evaluate_improved(V, F, BV, SV, C_s, 10, 10, 0.0001, 4);
             std::cout << "Finished" << std::endl;
 
             igl::colormap(igl::COLOR_MAP_TYPE_VIRIDIS, C_s, C_s.minCoeff(), C_s.maxCoeff(), C);
@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
             C_s.setZero();
             BV.setZero();
             std::cout << "Begin" << std::endl;
-            poisson_evaluate(V, F, BV, SV, C_s, source_term_func);
+            poisson_evaluate_improved(V, F, BV, SV, C_s, source_term_func,10,10,0.0001,1);
             std::cout << "Finished" << std::endl;
 
             igl::colormap(igl::COLOR_MAP_TYPE_VIRIDIS, C_s, C_s.minCoeff(), C_s.maxCoeff(), C);
