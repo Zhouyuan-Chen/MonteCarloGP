@@ -1,5 +1,6 @@
 #include "LaplaceEvaluator.hpp"
 #include <igl/AABB.h>
+#include <igl/point_mesh_squared_distance.h>
 #include <parlay/primitives.h>
 #include <chrono>
 
@@ -14,7 +15,11 @@ void laplace_evaluate(
 {
     using Clock = std::chrono::high_resolution_clock;
     auto start_time = Clock::now();
-
+        std::cout << "Laplace evaluation work: " << static_cast<int>(SV.rows()) << " * " << sample_num
+              << " * " << walk_step << " * log(" << static_cast<int>(F.rows()) << ")"
+               << std::endl;
+    std::cout << "Laplace evaluation span: " << 1 << " * " << 1 << " * " << walk_step << " * log("
+              << static_cast<int>(F.rows()) << ")" << std::endl;
 
     igl::AABB<Eigen::MatrixXd, 3> bvh;
     bvh.init(V, F);
@@ -94,6 +99,98 @@ void laplace_evaluate(
     //     // std::cout << "] " << int(progress * 100.0) << " %\r";
     //     // std::cout.flush();
     // }
+
+    auto end_time = Clock::now();
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    std::cout << "Laplace evaluation completed in " << elapsed.count() << " seconds.\n";
+}
+
+void laplace_evaluate_improved(
+    const Eigen::MatrixXd& V,
+    const Eigen::MatrixXi& F,
+    const Eigen::VectorXd& BV,
+    const Eigen::MatrixXd& SV,
+    Eigen::VectorXd& EV,
+    const int64_t sample_num,
+    const int64_t walk_step,
+    const double epsilon,
+    const int64_t sample_on_sphere_num)
+{
+    using Clock = std::chrono::high_resolution_clock;
+    auto start_time = Clock::now();
+    std::cout << "Laplace evaluation work: " << static_cast<int>(SV.rows()) << " * " << sample_num
+              << " * " << walk_step << " * log(" << static_cast<int>(F.rows()) << ") * "
+              << sample_on_sphere_num << std::endl;
+    std::cout << "Laplace evaluation span: " << 1 << " * " << 1 << " * " << walk_step << " * log("
+              << static_cast<int>(F.rows()) << ") * " << 1 << std::endl;
+    igl::AABB<Eigen::MatrixXd, 3> bvh;
+    bvh.init(V, F);
+
+    Eigen::MatrixXd C;
+    Eigen::VectorXd R, I;
+    EV.resize(SV.rows());
+
+    const auto& evaluate_val = [&](int64_t i) { return BV(F(i, 0)); };
+
+    const std::function<double(Eigen::MatrixXd&, int64_t, double)> laplace_wos =
+        [&](Eigen::MatrixXd& P, int64_t deep_num, double distance) -> double {
+        if (distance < 0) {
+            bvh.squared_distance(V, F, P, R, I, C);
+            distance = R(0);
+        }
+
+        int64_t id = I(0);
+
+        if (deep_num <= 0 || distance <= epsilon) {
+            return evaluate_val(id);
+        }
+
+        std::vector<Eigen::Vector3d> new_samples(sample_on_sphere_num);
+        std::vector<double> new_sample_dists(sample_on_sphere_num);
+
+        parlay::parallel_for(0, sample_on_sphere_num, [&](int k) {
+            Eigen::MatrixXd R_Sphere_vec;
+            Eigen::VectorXd vecR(1);
+            vecR(0) = distance;
+
+            sampling_on_sphere(R_Sphere_vec, vecR);
+            Eigen::Vector3d new_sample_P = P.row(0) + R_Sphere_vec.row(0);
+            new_samples[k] = new_sample_P;
+
+            Eigen::VectorXd R_temp;
+            Eigen::VectorXi I_temp;
+            Eigen::MatrixXd C_temp;
+            bvh.squared_distance(V, F, new_sample_P.transpose(), R_temp, I_temp, C_temp);
+            new_sample_dists[k] = R_temp(0);
+        });
+
+        // reduce求最小距离对应的index
+        int best_k = parlay::reduce(
+                         parlay::delayed_tabulate(
+                             sample_on_sphere_num,
+                             [&](int k) { return std::make_pair(new_sample_dists[k], k); }),
+                         parlay::minm<std::pair<double, int>>())
+                         .second;
+
+        P.row(0) = new_samples[best_k];
+        double best_dist = new_sample_dists[best_k];
+
+        return laplace_wos(P, deep_num - 1, best_dist);
+    };
+
+
+    parlay::parallel_for(0, static_cast<int>(SV.rows()), [&](int64_t i) {
+        Eigen::MatrixXd P(1, 3);
+        P << SV(i, 0), SV(i, 1), SV(i, 2);
+        // tabulate并行，平均作为结果
+        auto samples = parlay::delayed_tabulate(sample_num, [&](int64_t j) -> double {
+            Eigen::MatrixXd P_copy = P;
+            return laplace_wos(P_copy, walk_step, -1.0);
+        });
+        // reduce求和
+        double evaluate_val_sum = parlay::reduce(samples, parlay::addm<double>());
+        EV(i) = evaluate_val_sum / static_cast<double>(sample_num);
+    });
 
     auto end_time = Clock::now();
     std::chrono::duration<double> elapsed = end_time - start_time;

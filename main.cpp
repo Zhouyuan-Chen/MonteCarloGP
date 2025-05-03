@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
     Eigen::MatrixXd V, SV, C;
     Eigen::MatrixXi F;
     Eigen::VectorXd C_s;
-    int64_t sample_num = 1024;
+    int64_t sample_num = 2;
     igl::read_triangle_mesh(argv[1], V, F);
 
     bool cut_half = false;
@@ -91,7 +91,7 @@ int main(int argc, char* argv[])
             C_s.resize(SV.rows());
             BV = (BV_raw.array() - y_min) / (y_max - y_min);
             std::cout << "Begin" << std::endl;
-            laplace_evaluate(V, F, BV, SV, C_s);
+            laplace_evaluate_improved(V, F, BV, SV, C_s, 100, 10, 0.0001, 1);
             std::cout << "Finished" << std::endl;
 
             igl::colormap(igl::COLOR_MAP_TYPE_VIRIDIS, C_s, C_s.minCoeff(), C_s.maxCoeff(), C);
