@@ -133,20 +133,20 @@ void laplace_evaluate_improved(
 
     const auto& evaluate_val = [&](int64_t i) { return BV(F(i, 0)); };
 
-    const std::function<double(Eigen::MatrixXd&, int64_t, double)> laplace_wos =
-        [&](Eigen::MatrixXd& P, int64_t deep_num, double distance) -> double {
+    const std::function<double(Eigen::MatrixXd, int64_t, int64_t, double)> laplace_wos =
+        [&](Eigen::MatrixXd P, int64_t deep_num, int64_t id, double distance) -> double {
         if (distance < 0) {
             bvh.squared_distance(V, F, P, R, I, C);
+            id = I(0);
             distance = R(0);
         }
-
-        int64_t id = I(0);
 
         if (deep_num <= 0 || distance <= epsilon) {
             return evaluate_val(id);
         }
 
-        std::vector<Eigen::Vector3d> new_samples(sample_on_sphere_num);
+        std::vector<Eigen::MatrixXd> new_samples(sample_on_sphere_num);
+        std::vector<int64_t> new_sample_faceid(sample_on_sphere_num);
         std::vector<double> new_sample_dists(sample_on_sphere_num);
 
         parlay::parallel_for(0, sample_on_sphere_num, [&](int k) {
@@ -154,14 +154,16 @@ void laplace_evaluate_improved(
             Eigen::VectorXd vecR(1);
             vecR(0) = distance;
             sampling_on_sphere(R_Sphere_vec, vecR);
-            Eigen::Vector3d new_sample_P = P.row(0) + R_Sphere_vec.row(0);
+            Eigen::MatrixXd new_sample_P = P + R_Sphere_vec;
             new_samples[k] = new_sample_P;
 
             Eigen::VectorXd R_temp;
             Eigen::VectorXi I_temp;
             Eigen::MatrixXd C_temp;
-            bvh.squared_distance(V, F, new_sample_P.transpose(), R_temp, I_temp, C_temp);
+            bvh.squared_distance(V, F, new_sample_P, R_temp, I_temp, C_temp);
+            new_sample_faceid[k] = I_temp(0);
             new_sample_dists[k] = R_temp(0);
+
         });
 
         // reduce求最小距离对应的index
@@ -172,10 +174,7 @@ void laplace_evaluate_improved(
                          parlay::minm<std::pair<double, int>>())
                          .second;
 
-        P.row(0) = new_samples[best_k];
-        double best_dist = new_sample_dists[best_k];
-
-        return laplace_wos(P, deep_num - 1, best_dist);
+        return laplace_wos(new_samples[best_k], deep_num - 1, new_sample_faceid[best_k],new_sample_dists[best_k]);
     };
 
 
@@ -186,7 +185,7 @@ void laplace_evaluate_improved(
         std::vector<double> results(sample_num);
         parlay::parallel_for(0, static_cast<int>(sample_num), [&](int64_t j) {
             Eigen::MatrixXd P_copy = P;
-            results[j] = laplace_wos(P_copy, walk_step, -1.0);
+            results[j] = laplace_wos(P_copy, walk_step, -1, -1.0);
         });
         double evaluate_val_sum = std::accumulate(results.begin(), results.end(), 0.0);
         EV(i) = evaluate_val_sum / static_cast<double>(sample_num);
@@ -248,20 +247,20 @@ void laplace_evaluate_load_balance(
 
     const auto& evaluate_val = [&](int64_t i) { return BV(F(i, 0)); };
 
-    const std::function<double(Eigen::MatrixXd&, int64_t, double)> laplace_wos =
-        [&](Eigen::MatrixXd& P, int64_t deep_num, double distance) -> double {
+    const std::function<double(Eigen::MatrixXd, int64_t, int64_t, double)> laplace_wos =
+        [&](Eigen::MatrixXd P, int64_t deep_num, int64_t id, double distance) -> double {
         if (distance < 0) {
             bvh.squared_distance(V, F, P, R, I, C);
+            id = I(0);
             distance = R(0);
         }
-
-        int64_t id = I(0);
 
         if (deep_num <= 0 || distance <= epsilon) {
             return evaluate_val(id);
         }
 
-        std::vector<Eigen::Vector3d> new_samples(sample_on_sphere_num);
+        std::vector<Eigen::MatrixXd> new_samples(sample_on_sphere_num);
+        std::vector<int64_t> new_sample_faceid(sample_on_sphere_num);
         std::vector<double> new_sample_dists(sample_on_sphere_num);
 
         parlay::parallel_for(0, sample_on_sphere_num, [&](int k) {
@@ -269,13 +268,14 @@ void laplace_evaluate_load_balance(
             Eigen::VectorXd vecR(1);
             vecR(0) = distance;
             sampling_on_sphere(R_Sphere_vec, vecR);
-            Eigen::Vector3d new_sample_P = P.row(0) + R_Sphere_vec.row(0);
+            Eigen::MatrixXd new_sample_P = P + R_Sphere_vec;
             new_samples[k] = new_sample_P;
 
             Eigen::VectorXd R_temp;
             Eigen::VectorXi I_temp;
             Eigen::MatrixXd C_temp;
-            bvh.squared_distance(V, F, new_sample_P.transpose(), R_temp, I_temp, C_temp);
+            bvh.squared_distance(V, F, new_sample_P, R_temp, I_temp, C_temp);
+            new_sample_faceid[k] = I_temp(0);
             new_sample_dists[k] = R_temp(0);
         });
 
@@ -287,10 +287,7 @@ void laplace_evaluate_load_balance(
                          parlay::minm<std::pair<double, int>>())
                          .second;
 
-        P.row(0) = new_samples[best_k];
-        double best_dist = new_sample_dists[best_k];
-
-        return laplace_wos(P, deep_num - 1, best_dist);
+        return laplace_wos(new_samples[best_k], deep_num - 1, new_sample_faceid[best_k],new_sample_dists[best_k]);
     };
 
     parlay::parallel_for(0, num_threads, [&](int t) {
@@ -303,7 +300,7 @@ void laplace_evaluate_load_balance(
             std::vector<double> results(sample_num);
             parlay::parallel_for(0, static_cast<int>(sample_num), [&](int64_t j) {
                 Eigen::MatrixXd P_copy = P;
-                results[j] = laplace_wos(P_copy, walk_step, -1.0);
+                results[j] = laplace_wos(P_copy, walk_step, -1, -1.0);
             });
             double evaluate_val_sum = std::accumulate(results.begin(), results.end(), 0.0);
             EV(idx) = evaluate_val_sum / static_cast<double>(sample_num);

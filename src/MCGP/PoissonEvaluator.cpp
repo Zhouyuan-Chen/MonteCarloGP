@@ -148,20 +148,20 @@ void poisson_evaluate_improved(
 
     const auto& evaluate_val = [&](int64_t i) { return BV(F(i, 0)); };
 
-    const std::function<double(Eigen::MatrixXd&, int64_t, double)> poisson_wos =
-        [&](Eigen::MatrixXd& P, int64_t deep_num, double distance) -> double {
+    const std::function<double(Eigen::MatrixXd, int64_t, int64_t, double)> poisson_wos =
+        [&](Eigen::MatrixXd P, int64_t deep_num, int64_t id, double distance) -> double {
         if (distance < 0) {
             bvh.squared_distance(V, F, P, R, I, C);
+            id = I(0);
             distance = R(0);
         }
 
-        int64_t id = I(0);
-
-        if (deep_num <= 0|| distance <= epsilon) {
+        if (deep_num <= 0) {
             return evaluate_val(id);
         }
 
         std::vector<Eigen::MatrixXd> new_samples(sample_on_sphere_num);
+        std::vector<int64_t> new_sample_faceid(sample_on_sphere_num);
         std::vector<double> new_sample_dists(sample_on_sphere_num);
 
         parlay::parallel_for(0, sample_on_sphere_num, [&](int k) {
@@ -169,13 +169,14 @@ void poisson_evaluate_improved(
             Eigen::VectorXd vecR(1);
             vecR(0) = distance;
             sampling_on_sphere(R_Sphere_vec, vecR);
-            Eigen::MatrixXd new_sample_P_boundary = P + R_Sphere_vec; // single row shifted
-            new_samples[k] = new_sample_P_boundary;
+            Eigen::MatrixXd new_sample_P = P + R_Sphere_vec;
+            new_samples[k] = new_sample_P;
 
             Eigen::VectorXd R_temp;
             Eigen::VectorXi I_temp;
             Eigen::MatrixXd C_temp;
-            bvh.squared_distance(V, F, new_sample_P_boundary, R_temp, I_temp, C_temp);
+            bvh.squared_distance(V, F, new_sample_P, R_temp, I_temp, C_temp);
+            new_sample_faceid[k] = I_temp(0);
             new_sample_dists[k] = R_temp(0);
         });
 
@@ -186,7 +187,7 @@ void poisson_evaluate_improved(
                          parlay::minm<std::pair<double, int>>())
                          .second;
 
-        double term1 = poisson_wos(new_samples[best_k], deep_num - 1, new_sample_dists[best_k]);
+        double term1 = poisson_wos(new_samples[best_k], deep_num - 1, new_sample_faceid[best_k],new_sample_dists[best_k]);
 
         Eigen::MatrixXd R_Sphere_vec;
         Eigen::VectorXd vecR(1);
@@ -208,7 +209,7 @@ void poisson_evaluate_improved(
         std::vector<double> results(sample_num);
         parlay::parallel_for(0, static_cast<int>(sample_num), [&](int64_t j) {
             Eigen::MatrixXd P_copy = P;
-            results[j] = poisson_wos(P_copy, walk_step, -1.0);
+            results[j] = poisson_wos(P_copy, walk_step, -1, -1.0);
         });
         double evaluate_val_sum = std::accumulate(results.begin(), results.end(), 0.0);
         EV(i) = evaluate_val_sum / static_cast<double>(sample_num);
@@ -271,20 +272,20 @@ void poisson_evaluate_load_balance(
 
     const auto& evaluate_val = [&](int64_t i) { return BV(F(i, 0)); };
 
-    const std::function<double(Eigen::MatrixXd&, int64_t, double)> poisson_wos =
-        [&](Eigen::MatrixXd& P, int64_t deep_num, double distance) -> double {
+    const std::function<double(Eigen::MatrixXd, int64_t, int64_t, double)> poisson_wos =
+        [&](Eigen::MatrixXd P, int64_t deep_num, int64_t id, double distance) -> double {
         if (distance < 0) {
             bvh.squared_distance(V, F, P, R, I, C);
+            id = I(0);
             distance = R(0);
         }
-
-        int64_t id = I(0);
 
         if (deep_num <= 0|| distance <= epsilon) {
             return evaluate_val(id);
         }
 
-        std::vector<Eigen::Vector3d> new_samples(sample_on_sphere_num);
+        std::vector<Eigen::MatrixXd> new_samples(sample_on_sphere_num);
+        std::vector<int64_t> new_sample_faceid(sample_on_sphere_num);
         std::vector<double> new_sample_dists(sample_on_sphere_num);
 
         parlay::parallel_for(0, sample_on_sphere_num, [&](int k) {
@@ -292,13 +293,14 @@ void poisson_evaluate_load_balance(
             Eigen::VectorXd vecR(1);
             vecR(0) = distance;
             sampling_on_sphere(R_Sphere_vec, vecR);
-            Eigen::Vector3d new_sample_P = P.row(0) + R_Sphere_vec.row(0); // single row shifted
+            Eigen::MatrixXd new_sample_P = P + R_Sphere_vec;
             new_samples[k] = new_sample_P;
 
             Eigen::VectorXd R_temp;
             Eigen::VectorXi I_temp;
             Eigen::MatrixXd C_temp;
-            bvh.squared_distance(V, F, new_sample_P.transpose(), R_temp, I_temp, C_temp);
+            bvh.squared_distance(V, F, new_sample_P, R_temp, I_temp, C_temp);
+            new_sample_faceid[k] = I_temp(0);
             new_sample_dists[k] = R_temp(0);
         });
 
@@ -309,21 +311,18 @@ void poisson_evaluate_load_balance(
                          parlay::minm<std::pair<double, int>>())
                          .second;
 
-        P.row(0) = new_samples[best_k];
-        double best_dist = new_sample_dists[best_k];
+        double term1 = poisson_wos(new_samples[best_k], deep_num - 1, new_sample_faceid[best_k],new_sample_dists[best_k]);
 
-        double term1 = poisson_wos(P, deep_num - 1, best_dist);
-
-        Eigen::MatrixXd R_Sphere_vec_inside;
+        Eigen::MatrixXd R_Sphere_vec;
         Eigen::VectorXd vecR(1);
-        vecR(0) = best_dist;
+        vecR(0) = new_sample_dists[best_k];
 
-        sampling_in_sphere(R_Sphere_vec_inside, vecR);
-        Eigen::MatrixXd P_inside = P + R_Sphere_vec_inside;
+        sampling_in_sphere(R_Sphere_vec, vecR);
+        Eigen::MatrixXd P_inside = P + R_Sphere_vec;
 
-        double term2 = 4.0 / 3.0 * MY_PI * std::pow(best_dist, 3) *
+        double term2 = 4.0 / 3.0 * MY_PI * std::pow(new_sample_dists[best_k], 3) *
                        source_term_func(P_inside.row(0).transpose()) *
-                       green_func(P.row(0).transpose(), P_inside.row(0).transpose(), best_dist);
+                       green_func(P.row(0).transpose(), P_inside.row(0).transpose(), new_sample_dists[best_k]);
 
         return term1 + term2;
     };
@@ -337,7 +336,7 @@ void poisson_evaluate_load_balance(
             std::vector<double> results(sample_num);
             parlay::parallel_for(0, static_cast<int>(sample_num), [&](int64_t j) {
                 Eigen::MatrixXd P_copy = P;
-                results[j] = poisson_wos(P_copy, walk_step, -1.0);
+                results[j] = poisson_wos(P_copy, walk_step, -1, -1.0);
             });
             double evaluate_val_sum = std::accumulate(results.begin(), results.end(), 0.0);
             EV(idx) = evaluate_val_sum / static_cast<double>(sample_num);

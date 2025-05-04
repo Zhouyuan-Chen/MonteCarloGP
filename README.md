@@ -1,7 +1,13 @@
-# cmake-project-template
-![example branch parameter](https://github.com/Zhouyuan-Chen/cmake-project-template/actions/workflows/build.yml/badge.svg)
+mkdir cmake
 
-This is a template for the cmake project. You should do the  following steps to setup your project:
+cd cmake
 
-* change the project name in the CMakeList.txt
-* Do not forget change the binary file name in .github/workflows/Build.ymls
+cmake ../
+
+make -j8
+
+./alligator_play ../data/bunny.off 10 10 0.0001 0
+
+./alligator_play ../data/bunny.off 10 10 0.0001 1
+
+./alligator_play ../data/bunny.off 10 10 0.0001 2
