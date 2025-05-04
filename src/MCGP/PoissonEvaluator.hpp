@@ -36,3 +36,16 @@ void poisson_evaluate_improved(
     const int64_t walk_step = 10,
     const double epsilon = 0.1,
     const int64_t sample_on_sphere_num = 8);
+
+
+void poisson_evaluate_load_balance(
+    const Eigen::MatrixXd& V,
+    const Eigen::MatrixXi& F,
+    const Eigen::VectorXd& BV,
+    const Eigen::MatrixXd& SV,
+    Eigen::VectorXd& EV,
+    const std::function<double(const Eigen::Vector3d&)>& source_term_func,
+    const int64_t sample_num = 10,
+    const int64_t walk_step = 10,
+    const double epsilon = 0.1,
+    const int64_t sample_on_sphere_num = 8);

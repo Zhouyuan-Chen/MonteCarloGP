@@ -13,8 +13,17 @@ int main(int argc, char* argv[])
     Eigen::MatrixXd V, SV, C;
     Eigen::MatrixXi F;
     Eigen::VectorXd C_s;
-    int64_t sample_num = 2;
+    int64_t sample_num = 4096L;
+    int64_t mc_sample_num = 10L;
+    int64_t walk_steps = 10L;
+    double epsilon = 0.001;
+    int64_t selected_algo = 2;
     igl::read_triangle_mesh(argv[1], V, F);
+    if (argc >= 3) mc_sample_num = std::stoi(argv[2]);
+    if (argc >= 4) walk_steps = std::stoi(argv[3]);
+    if (argc >= 5) epsilon = std::stod(argv[4]);
+    if (argc >= 6 ) selected_algo=std::stoi(argv[5]);
+
 
     bool cut_half = false;
 
@@ -91,7 +100,21 @@ int main(int argc, char* argv[])
             C_s.resize(SV.rows());
             BV = (BV_raw.array() - y_min) / (y_max - y_min);
             std::cout << "Begin" << std::endl;
-            laplace_evaluate_improved(V, F, BV, SV, C_s, 10, 10, 0.0001, 4);
+            switch (selected_algo)
+            {
+            case 0:
+                laplace_evaluate(V, F, BV, SV, C_s, mc_sample_num, walk_steps);
+                break;
+            case 1:
+                laplace_evaluate_improved(V, F, BV, SV, C_s, mc_sample_num, walk_steps, epsilon, 1);
+                break;
+            case 2:
+                laplace_evaluate_load_balance(V, F, BV, SV, C_s, mc_sample_num, walk_steps, epsilon, 1);
+                break;
+            default:
+                break;
+            }
+            
             std::cout << "Finished" << std::endl;
 
             igl::colormap(igl::COLOR_MAP_TYPE_VIRIDIS, C_s, C_s.minCoeff(), C_s.maxCoeff(), C);
@@ -106,7 +129,20 @@ int main(int argc, char* argv[])
             C_s.setZero();
             BV.setZero();
             std::cout << "Begin" << std::endl;
-            poisson_evaluate_improved(V, F, BV, SV, C_s, source_term_func,10,10,0.0001,1);
+                        switch (selected_algo)
+            {
+            case 0:
+                poisson_evaluate(V, F, BV, SV, C_s, source_term_func, mc_sample_num, walk_steps);
+                break;
+            case 1:
+                poisson_evaluate_improved(V, F, BV, SV, C_s, source_term_func, mc_sample_num, walk_steps, epsilon, 1);
+                break;
+            case 2:
+                poisson_evaluate_load_balance(V, F, BV, SV, C_s,source_term_func, mc_sample_num, walk_steps, epsilon, 1);
+                break;
+            default:
+                break;
+            }
             std::cout << "Finished" << std::endl;
 
             igl::colormap(igl::COLOR_MAP_TYPE_VIRIDIS, C_s, C_s.minCoeff(), C_s.maxCoeff(), C);
