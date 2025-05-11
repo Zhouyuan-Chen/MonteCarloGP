@@ -1,3 +1,7 @@
+The main source code is under src/MCGP 
+
+You can use the commands below to build and run our project.
+
 mkdir cmake
 
 cd cmake
